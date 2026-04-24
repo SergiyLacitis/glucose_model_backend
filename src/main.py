@@ -7,4 +7,9 @@ app = FastAPI(title=settings.general.title, description=settings.general.descrip
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(
+        app,
+        host=settings.general.host,
+        port=settings.general.port,
+        log_level=settings.general.log_level,
+    )
