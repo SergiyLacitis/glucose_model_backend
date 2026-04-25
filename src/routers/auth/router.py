@@ -30,7 +30,10 @@ def generate_token_info(user: User) -> Token:
         token_type="refresh",
         expires_delta=timedelta(days=settings.auth.refresh_token_expire_days),
     )
-    return Token(access_token=access_token, refresh_token=refresh_token)
+
+    return Token(
+        access_token=access_token, refresh_token=refresh_token, token_type="bearer"
+    )
 
 
 @router.post("/login", response_model=Token)

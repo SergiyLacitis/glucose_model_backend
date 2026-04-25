@@ -9,33 +9,30 @@ from database.database_helper import AsyncDBSessionDep
 from models.user import User
 from utils import security
 
-oauth2_bearer = OAuth2PasswordBearer(tokenUrl="/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 
 async def validate_user(
-    session: AsyncDBSessionDep,
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
+    session: AsyncDBSessionDep,
 ) -> User:
     stmt = select(User).where(User.email == form_data.username)
     user = (await session.execute(stmt)).scalar_one_or_none()
 
-    if not user:
+    if not user or not security.verify_password(
+        form_data.password, user.hashed_password
+    ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid credentials",
-        )
-
-    if not security.verify_password(form_data.password, user.hashed_password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid credentials",
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
         )
 
     return user
 
 
 async def get_current_user_payload(
-    token: Annotated[str, Depends(oauth2_bearer)],
+    token: Annotated[str, Depends(oauth2_scheme)],
 ) -> dict:
     try:
         return security.decode_token(token)
