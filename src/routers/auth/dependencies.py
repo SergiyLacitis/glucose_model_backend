@@ -2,14 +2,14 @@ from typing import Annotated
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from jwt.exceptions import InvalidTokenError
+from jwt.exceptions import ExpiredSignatureError, InvalidTokenError
 from sqlmodel import select
 
 from database.database_helper import AsyncDBSessionDep
 from models.user import User
 from utils import security
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 
 async def validate_user(
@@ -28,6 +28,13 @@ async def validate_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User is disabled",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     return user
 
 
@@ -36,14 +43,21 @@ async def get_current_user_payload(
 ) -> dict:
     try:
         return security.decode_token(token)
+    except ExpiredSignatureError as err:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has expired",
+            headers={"WWW-Authenticate": 'Bearer error="invalid_token"'},
+        ) from err
     except InvalidTokenError as err:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token",
+            headers={"WWW-Authenticate": 'Bearer error="invalid_token"'},
         ) from err
 
 
-async def get_auth_user_from_token(
+async def _get_auth_user_from_token(
     payload: dict,
     session: AsyncDBSessionDep,
     expected_type: str,
@@ -52,14 +66,14 @@ async def get_auth_user_from_token(
     if token_type != expected_type:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token type",
+            detail=f"Invalid token type: expected '{expected_type}'",
         )
 
     email = payload.get("sub")
     if not email:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token",
+            detail="Invalid token payload",
         )
 
     stmt = select(User).where(User.email == email)
@@ -67,8 +81,8 @@ async def get_auth_user_from_token(
 
     if not user:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found",
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token",
         )
 
     if not user.is_active:
@@ -84,11 +98,11 @@ async def get_auth_user_from_access_token(
     payload: Annotated[dict, Depends(get_current_user_payload)],
     session: AsyncDBSessionDep,
 ) -> User:
-    return await get_auth_user_from_token(payload, session, "access")
+    return await _get_auth_user_from_token(payload, session, "access")
 
 
 async def get_auth_user_from_refresh_token(
     payload: Annotated[dict, Depends(get_current_user_payload)],
     session: AsyncDBSessionDep,
 ) -> User:
-    return await get_auth_user_from_token(payload, session, "refresh")
+    return await _get_auth_user_from_token(payload, session, "refresh")

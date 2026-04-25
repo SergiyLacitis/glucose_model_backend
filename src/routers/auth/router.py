@@ -2,6 +2,7 @@ from datetime import timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.exc import IntegrityError
 
 from config import settings
 from database.database_helper import AsyncDBSessionDep
@@ -20,19 +21,23 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 def generate_token_info(user: User) -> Token:
+    common_claims = {"sub": user.email, "uid": str(user.id)}
+
     access_token = create_token(
-        data={"sub": user.email},
+        data=common_claims,
         token_type="access",
         expires_delta=timedelta(minutes=settings.auth.access_token_expire_minutes),
     )
     refresh_token = create_token(
-        data={"sub": user.email},
+        data=common_claims,
         token_type="refresh",
         expires_delta=timedelta(days=settings.auth.refresh_token_expire_days),
     )
 
     return Token(
-        access_token=access_token, refresh_token=refresh_token, token_type="bearer"
+        access_token=access_token,
+        refresh_token=refresh_token,
+        token_type="bearer",
     )
 
 
@@ -41,7 +46,11 @@ async def login(user: Annotated[User, Depends(validate_user)]):
     return generate_token_info(user)
 
 
-@router.post("/register", response_model=Token, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/register",
+    response_model=Token,
+    status_code=status.HTTP_201_CREATED,
+)
 async def register_doctor(user_in: DoctorRegister, session: AsyncDBSessionDep):
     user = User(
         email=user_in.email,
@@ -49,7 +58,14 @@ async def register_doctor(user_in: DoctorRegister, session: AsyncDBSessionDep):
         role=Role.doctor,
     )
     session.add(user)
-    await session.flush()
+    try:
+        await session.flush()
+    except IntegrityError as err:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="User with this email already exists",
+        ) from err
 
     doctor = Doctor(
         id=user.id,
@@ -60,7 +76,16 @@ async def register_doctor(user_in: DoctorRegister, session: AsyncDBSessionDep):
         gender=user_in.gender,
     )
     session.add(doctor)
-    await session.commit()
+
+    try:
+        await session.commit()
+    except IntegrityError as err:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Could not create doctor profile",
+        ) from err
+
     return generate_token_info(user)
 
 
@@ -72,7 +97,15 @@ async def register_patient(
 ):
     if current_user.role != Role.doctor:
         raise HTTPException(
-            status_code=403, detail="Only doctors can register patients"
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only doctors can register patients",
+        )
+
+    doctor_profile = await session.get(Doctor, current_user.id)
+    if doctor_profile is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Doctor profile not found",
         )
 
     user = User(
@@ -81,7 +114,14 @@ async def register_patient(
         role=Role.patient,
     )
     session.add(user)
-    await session.flush()
+    try:
+        await session.flush()
+    except IntegrityError as err:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="User with this email already exists",
+        ) from err
 
     patient = Patient(
         id=user.id,
@@ -93,7 +133,16 @@ async def register_patient(
         doctor_id=current_user.id,
     )
     session.add(patient)
-    await session.commit()
+
+    try:
+        await session.commit()
+    except IntegrityError as err:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Could not create patient profile",
+        ) from err
+
     return {"status": "success", "patient_id": user.id}
 
 
