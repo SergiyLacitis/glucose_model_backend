@@ -2,13 +2,12 @@ from datetime import timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlmodel import select
 
 from config import settings
 from database.database_helper import AsyncDBSessionDep
-from models.user import User
+from models.user import Doctor, Patient, Role, User
 from schemas.token import Token
-from schemas.user import UserCreate, UserResponse
+from schemas.user import DoctorRegister, PatientCreate, UserResponse
 from utils.security import create_token, get_password_hash
 
 from .dependencies import (
@@ -40,25 +39,59 @@ async def login(user: Annotated[User, Depends(validate_user)]):
 
 
 @router.post("/register", response_model=Token, status_code=status.HTTP_201_CREATED)
-async def register(user_in: UserCreate, session: AsyncDBSessionDep):
-    stmt = select(User).where(User.email == user_in.email)
-    existing_user = (await session.execute(stmt)).scalar_one_or_none()
-
-    if existing_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email is already registered",
-        )
-
+async def register_doctor(user_in: DoctorRegister, session: AsyncDBSessionDep):
     user = User(
         email=user_in.email,
         hashed_password=get_password_hash(user_in.password),
+        role=Role.doctor,
     )
     session.add(user)
-    await session.commit()
-    await session.refresh(user)
+    await session.flush()
 
+    doctor = Doctor(
+        id=user.id,
+        first_name=user_in.first_name,
+        last_name=user_in.last_name,
+        middle_name=user_in.middle_name,
+        birth_date=user_in.birth_date,
+        gender=user_in.gender,
+    )
+    session.add(doctor)
+    await session.commit()
     return generate_token_info(user)
+
+
+@router.post("/register-patient", status_code=status.HTTP_201_CREATED)
+async def register_patient(
+    patient_in: PatientCreate,
+    current_user: Annotated[User, Depends(get_auth_user_from_access_token)],
+    session: AsyncDBSessionDep,
+):
+    if current_user.role != Role.doctor:
+        raise HTTPException(
+            status_code=403, detail="Only doctors can register patients"
+        )
+
+    user = User(
+        email=patient_in.email,
+        hashed_password=get_password_hash(patient_in.password),
+        role=Role.patient,
+    )
+    session.add(user)
+    await session.flush()
+
+    patient = Patient(
+        id=user.id,
+        first_name=patient_in.first_name,
+        last_name=patient_in.last_name,
+        middle_name=patient_in.middle_name,
+        birth_date=patient_in.birth_date,
+        gender=patient_in.gender,
+        doctor_id=current_user.id,
+    )
+    session.add(patient)
+    await session.commit()
+    return {"status": "success", "patient_id": user.id}
 
 
 @router.post("/refresh", response_model=Token)
