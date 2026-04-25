@@ -3,6 +3,7 @@ import uuid
 from datetime import UTC, date, datetime
 from typing import Optional
 
+from sqlalchemy import Column, DateTime
 from sqlmodel import Field, Relationship, SQLModel
 
 
@@ -49,7 +50,7 @@ class Patient(SQLModel, table=True):
     birth_date: date
     gender: Gender
 
-    doctor_id: uuid.UUID = Field(foreign_key="doctor.id")
+    doctor_id: uuid.UUID = Field(foreign_key="doctor.id", index=True)
 
     user: User = Relationship(back_populates="patient_profile")
     doctor: Doctor = Relationship(back_populates="patients")
@@ -59,10 +60,13 @@ class Patient(SQLModel, table=True):
 class Note(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     text: str
-    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
 
-    author_id: uuid.UUID = Field(foreign_key="doctor.id")
-    patient_id: uuid.UUID = Field(foreign_key="patient.id")
+    author_id: uuid.UUID = Field(foreign_key="doctor.id", index=True)
+    patient_id: uuid.UUID = Field(foreign_key="patient.id", index=True)
 
     author: Doctor = Relationship(back_populates="notes")
     patient: Patient = Relationship(back_populates="notes")

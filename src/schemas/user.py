@@ -18,7 +18,6 @@ class NoteResponse(BaseModel):
     patient_id: uuid.UUID
 
 
-# Схеми для користувачів
 class DoctorRegister(BaseModel):
     email: EmailStr
     password: str
@@ -43,3 +42,26 @@ class UserResponse(BaseModel):
     id: uuid.UUID
     email: str
     role: Role
+
+
+class DoctorResponse(BaseModel):
+    id: uuid.UUID
+    first_name: str
+    last_name: str
+    middle_name: str | None = None
+    birth_date: date
+    gender: Gender
+
+
+class PatientResponse(BaseModel):
+    id: uuid.UUID
+    first_name: str
+    last_name: str
+    middle_name: str | None = None
+    birth_date: date
+    gender: Gender
+    doctor_id: uuid.UUID
+
+
+class PatientTransferRequest(BaseModel):
+    new_doctor_id: uuid.UUID
