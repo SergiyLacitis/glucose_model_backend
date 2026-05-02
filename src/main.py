@@ -12,8 +12,6 @@ from routers import api_router
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with db_helper.engine.begin() as conn:
-        import models.user
-
         await conn.run_sync(SQLModel.metadata.create_all)
     yield
     await db_helper.dispose()

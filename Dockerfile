@@ -8,6 +8,11 @@ COPY pyproject.toml uv.lock ./
 
 RUN uv sync --frozen --no-install-project --no-dev
 
-COPY /src ./
+COPY alembic.ini ./
+COPY migrations ./migrations
+COPY src ./src
 
-CMD ["uv", "run", "--no-dev", "./main.py"]
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+CMD ["/entrypoint.sh"]
