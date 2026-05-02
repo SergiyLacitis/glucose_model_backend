@@ -31,10 +31,16 @@ class AuthSettings(BaseModel):
     bcrypt_max_bytes: int = 72
 
 
+class PredictorSettings(BaseModel):
+    checkpoint_dir: str = "model"
+    require_on_startup: bool = False
+
+
 class Settings(BaseSettings):
     general: GeneralSettings = GeneralSettings()
     database: DatabaseSettings = DatabaseSettings()
     auth: AuthSettings = AuthSettings()
+    predictor: PredictorSettings = PredictorSettings()
 
 
 settings = Settings()

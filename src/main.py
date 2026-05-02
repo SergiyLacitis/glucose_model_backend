@@ -2,17 +2,19 @@ from contextlib import asynccontextmanager
 
 import uvicorn
 from fastapi import FastAPI
-from sqlmodel import SQLModel
 
 from config import settings
 from database import db_helper
 from routers import api_router
+from services.predictor_service import init_predictor_service
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    async with db_helper.engine.begin() as conn:
-        await conn.run_sync(SQLModel.metadata.create_all)
+    service = init_predictor_service()
+    if settings.predictor.require_on_startup and not service.is_ready():
+        raise RuntimeError(f"Prediction model is not loaded: {service.error}")
+
     yield
     await db_helper.dispose()
 

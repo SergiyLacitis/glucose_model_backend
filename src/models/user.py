@@ -55,6 +55,7 @@ class Patient(SQLModel, table=True):
     user: User = Relationship(back_populates="patient_profile")
     doctor: Doctor = Relationship(back_populates="patients")
     notes: list["Note"] = Relationship(back_populates="patient")
+    glucose_readings: list["GlucoseReading"] = Relationship(back_populates="patient")
 
 
 class Note(SQLModel, table=True):
@@ -70,3 +71,21 @@ class Note(SQLModel, table=True):
 
     author: Doctor = Relationship(back_populates="notes")
     patient: Patient = Relationship(back_populates="notes")
+
+
+class GlucoseReading(SQLModel, table=True):
+    __tablename__ = "glucose_reading"  # type: ignore
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    patient_id: uuid.UUID = Field(foreign_key="patient.id", index=True)
+    ts: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), nullable=False, index=True),
+        description="Measurement time in UTC",
+    )
+    glucose: float = Field(description="Blood glucose level, mg/dL")
+    source: str = Field(
+        default="cgm",
+        description="Data source: cgm, smbg (glucometer), manual",
+    )
+
+    patient: Patient = Relationship(back_populates="glucose_readings")

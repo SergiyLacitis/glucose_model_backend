@@ -10,9 +10,15 @@ dependencies = [
     "bcrypt>=5.0.0",
     "email-validator>=2.3.0",
     "fastapi[standard]>=0.136.1",
+    "joblib>=1.5.3",
+    "numpy>=2.4.4",
+    "pandas>=3.0.2",
     "pydantic-settings>=2.14.0",
     "pyjwt>=2.12.1",
+    "scikit-learn>=1.8.0",
     "sqlmodel>=0.0.38",
+    "torch>=2.11.0",
+    "transformers>=5.7.0",
 ]
 
 [dependency-groups]
