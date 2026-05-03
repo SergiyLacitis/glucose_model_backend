@@ -137,6 +137,11 @@ class GlucosePredictor:
         s_real_t = torch.from_numpy(s_real).unsqueeze(0).to(d)  # type: ignore
         s_cat_t = torch.from_numpy(s_cat).unsqueeze(0).to(d)  # type: ignore
 
+        s_real_t = torch.from_numpy(s_real).unsqueeze(0).to(d)  # type: ignore
+        s_cat_t = torch.from_numpy(s_cat).unsqueeze(0).to(d)  # type: ignore
+
+        torch.manual_seed(42)
+
         gen = self.model.generate(
             past_values=past_values,
             past_time_features=past_tf,
