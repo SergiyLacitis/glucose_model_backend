@@ -4,7 +4,12 @@ import uuid
 from datetime import UTC, date, datetime, timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlmodel import delete, func, select
+
+from database.database_helper import AsyncDBSessionDep
+from models.user import GlucoseReading, Patient, Role, User
+from routers.auth.dependencies import get_auth_user_from_access_token
 from schemas.glucose import (
     GlucoseReadingBatchCreate,
     GlucoseReadingCreate,
@@ -12,11 +17,6 @@ from schemas.glucose import (
     PredictionPointResponse,
     PredictionResponse,
 )
-from sqlmodel import func, select
-
-from database.database_helper import AsyncDBSessionDep
-from models.user import GlucoseReading, Patient, Role, User
-from routers.auth.dependencies import get_auth_user_from_access_token
 from schemas.pagination import Page, PaginationParams, pagination_params
 from services.predictor_service import PredictorService, get_predictor_service
 
@@ -146,6 +146,48 @@ async def list_readings(
         limit=pagination.limit,
         offset=pagination.offset,
     )
+
+
+@router.delete(
+    "/patients/{patient_id}/readings",
+    status_code=status.HTTP_200_OK,
+)
+async def delete_readings(
+    patient_id: uuid.UUID,
+    current_user: CurrentUserDep,
+    session: AsyncDBSessionDep,
+    ts_from: Annotated[
+        datetime | None,
+        Query(description="Delete readings with ts >= ts_from (inclusive)"),
+    ] = None,
+    ts_to: Annotated[
+        datetime | None,
+        Query(description="Delete readings with ts < ts_to (exclusive)"),
+    ] = None,
+):
+    """
+    Delete a patient's CGM readings.
+
+    Behavior:
+      - without parameters — deletes all patient's readings;
+      - with ts_from — deletes from this timestamp onwards;
+      - with ts_to — deletes up to this timestamp (exclusive);
+      - with both — deletes within the specified range [ts_from, ts_to).
+
+    Returns the number of deleted records.
+    """
+    await _ensure_can_access_patient(patient_id, current_user, session)
+
+    stmt = delete(GlucoseReading).where(GlucoseReading.patient_id == patient_id)  # type: ignore
+    if ts_from is not None:
+        stmt = stmt.where(GlucoseReading.ts >= ts_from)  # type: ignore
+    if ts_to is not None:
+        stmt = stmt.where(GlucoseReading.ts < ts_to)  # type: ignore
+
+    result = await session.execute(stmt)
+    await session.commit()
+
+    return {"deleted": result.rowcount or 0}  # type: ignore
 
 
 def _age_in_years(birth_date: date, at: date | None = None) -> float:

@@ -6,6 +6,7 @@ services:
     volumes:
       - ./migrations:/app/migrations
       - ./src:/app/src
+      - ./scripts:/app/scripts
       - ./data:/app/data:ro
       - ./model:/app/model:ro
     depends_on:

@@ -6,6 +6,7 @@ from pathlib import Path
 
 import joblib
 import numpy as np
+import pandas as pd
 import torch
 from transformers import InformerConfig, InformerForPrediction
 
@@ -149,13 +150,13 @@ class GlucosePredictor:
         preds_norm = gen.sequences.median(dim=1).values.squeeze(0).cpu().numpy()  # type: ignore
         preds_mgdl = preds_norm * hist.pt_std + hist.pt_mean
 
+        ts_last_pd = pd.Timestamp(ts_last)
         points = []
         for i, val in enumerate(preds_mgdl):
+            future_pd = ts_last_pd + pd.Timedelta(minutes=sample_min * (i + 1))
             points.append(
                 PredictionPoint(
-                    ts=(ts_last + np.timedelta64(sample_min * (i + 1), "m"))
-                    .astype("datetime64[us]")
-                    .astype(object),
+                    ts=future_pd.to_pydatetime(),  # type: ignore
                     glucose=float(val),
                     minutes_ahead=sample_min * (i + 1),
                 )
@@ -164,22 +165,18 @@ class GlucosePredictor:
         return PredictionResult(
             predictions=points,
             horizon_min=self.horizon_minutes,
-            last_observed_ts=ts_last.astype("datetime64[us]").astype(object),
+            last_observed_ts=ts_last_pd.to_pydatetime(),  # type: ignore
             last_observed_glucose=float(g_window[-1]),
         )
 
     @staticmethod
     def _time_features_from_ts(ts: np.ndarray) -> np.ndarray:
-        ts_pd = np.asarray(ts, dtype="datetime64[ns]")
-        h = (ts_pd - ts_pd.astype("datetime64[D]")).astype("timedelta64[h]").astype(
-            np.int64
-        ) % 24
-        m = (ts_pd - ts_pd.astype("datetime64[h]")).astype("timedelta64[m]").astype(
-            np.int64
-        ) % 60
-        import pandas as pd
-
-        d = pd.DatetimeIndex(ts_pd).dayofweek.values  # type: ignore
+        idx = pd.DatetimeIndex(ts)
+        if idx.tz is not None:
+            idx = idx.tz_convert("UTC").tz_localize(None)
+        h = idx.hour.values  # type: ignore
+        m = idx.minute.values  # type: ignore
+        d = idx.dayofweek.values  # type: ignore
         feats = np.stack(
             [
                 np.sin(2 * np.pi * h / 24),
